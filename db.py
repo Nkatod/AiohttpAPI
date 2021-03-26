@@ -59,6 +59,19 @@ class UsersTable:
             await conn.execute('commit')
         return result
 
+    def __init__(self):
+        self.users_list = []
+
+    async def get_all_users(self):
+        engine = DBEngine().db_engine
+        async with engine.acquire() as conn:
+            sql_text = text('select user_id, login from users')
+            result = await conn.execute(sql_text)
+            for val in (await result.fetchall()):
+                self.users_list.append({'user_id':val[0], 'login':val[1]})
+
+
+
 
 items_table = Table(
     'items', meta,

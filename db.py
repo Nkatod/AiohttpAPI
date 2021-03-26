@@ -4,11 +4,12 @@ from sqlalchemy import (
     MetaData, Table, Column, ForeignKey,
     Integer, String, Date, Boolean
 )
+from security import generate_password_hash
+
 
 DSN = "mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
 
 meta = MetaData()
-
 
 class DBEngine(object):
     def __new__(cls):
@@ -27,13 +28,12 @@ class DBEngine(object):
     def db_engine(self, engine):
         self.__db_engine = engine
 
-
 _users_table = Table(
     'users', meta,
 
     Column('user_id', Integer, primary_key=True),
     Column('login', String(50), nullable=False),
-    Column('password', String(50), nullable=False)
+    Column('password', String(100), nullable=False)
 )
 
 
@@ -43,21 +43,39 @@ class UsersTable:
         return _users_table
 
     @staticmethod
-    async def check_user_if_exists(user_name) -> bool:
+    async def check_user_if_exists(user_name) -> int:
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
-            sql_text = text('select login from users where login=:login;')
-            rs = await conn.execute(sql_text, login=user_name)
-        return rs.rowcount > 0
+            sql_text = text('select user_id from users where login=:login;')
+            q_result = await conn.execute(sql_text, login=user_name)
+            if q_result.rowcount > 1:
+                raise ValueError('DB Many users found')
+            res = await q_result.fetchall()
+            result = None
+            if q_result.rowcount == 1:
+                result = res[0][0]
+        return result
 
     @staticmethod
     async def create_new_user(login: str, password: str) -> bool:
         engine = DBEngine().db_engine
+        password_hash = generate_password_hash(password)
         async with engine.acquire() as conn:
             sql_text = text('INSERT INTO users (login, password) VALUES(:login, :password);')
-            result = await conn.execute(sql_text, login=login, password=password)
+            result = await conn.execute(sql_text, login=login, password=password_hash)
             await conn.execute('commit')
         return result
+
+    @staticmethod
+    async def get_password_hash(login: str)-> str:
+        engine = DBEngine().db_engine
+        async with engine.acquire() as conn:
+            sql_text = text('select password from users where login=:login;')
+            result = await conn.execute(sql_text, login=login)
+            if result.rowcount != 1:
+                raise ValueError('DB Many users found')
+            res = await result.fetchall()
+        return res[0][0]
 
     def __init__(self):
         self.users_list = []
@@ -86,7 +104,7 @@ token_keys = Table(
     'tokens', meta,
 
     Column('token_id', Integer, primary_key=True),
-    Column('token', String(50), nullable=False),
+    Column('token', String(100), nullable=False),
     Column('Expires', Date, nullable=False),
     Column('user_id',
            Integer,
@@ -107,7 +125,7 @@ items_transport = Table(
            ForeignKey('users.user_id', ondelete='CASCADE'))
 )
 
-tables_list = [UsersTable.users_table,
+tables_list = [_users_table,
                items_table,
                token_keys,
                items_transport]

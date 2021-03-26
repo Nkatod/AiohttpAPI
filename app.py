@@ -7,6 +7,7 @@ from db import init_db
 from routes import setup_routes
 
 
+
 async def init():
     conf = load_config(DEFAULT_CONFIG_PATH)
 

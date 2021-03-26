@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 host: 127.0.0.1
 port: 8080
 
@@ -6,4 +7,14 @@ mysql:
   user: db_user
   password: Db_user321
   host: localhost
+=======
+host: 127.0.0.1
+port: 8080
+
+mysql:
+  database: simpleapi
+  user: db_user
+  password: Db_user321
+  host: localhost
+>>>>>>> 4b0356d9b8929b4372a010fce368bc581a064d8f
   port: 3306

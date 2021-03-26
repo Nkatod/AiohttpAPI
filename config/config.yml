@@ -1,2 +1,9 @@
 host: 127.0.0.1
 port: 8080
+
+mysql:
+  database: simpleapi
+  user: db_user
+  password: Db_user321
+  host: localhost
+  port: 3306

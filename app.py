@@ -1,32 +1,20 @@
 from aiohttp import web
 import asyncio
 import logging
-import json
-import pathlib
 import aiohttp_debugtoolbar
-from utils import load_config
-
-PROJ_ROOT = pathlib.Path(__file__).parent
-
-
-async def handle(request):
-    test_status = {'status': 'OK'}
-    return web.Response(text=json.dumps(test_status), status=200)
+from utils import load_config, DEFAULT_CONFIG_PATH
+from db import init_db
+from routes import setup_routes
 
 
-async def exception_handler(request):
-    raise NotImplementedError
+async def init():
+    conf = load_config(DEFAULT_CONFIG_PATH)
 
-
-async def init(loop):
-    conf = load_config(PROJ_ROOT / 'config' / 'config.yml')
-
-    app = web.Application(loop=loop)
+    app = web.Application()
+    app['config'] = conf
     aiohttp_debugtoolbar.setup(app)
-    app.router.add_get('/', handle)
-    app.router.add_route('GET', '/exc', exception_handler,
-                         name='exc_example')
-
+    db_pool = await init_db(app)
+    setup_routes(app)
     host, port = conf['host'], conf['port']
     return app, host, port
 
@@ -35,7 +23,7 @@ def main():
     logging.basicConfig(level=logging.WARNING)
 
     loop = asyncio.get_event_loop()
-    app, host, port = loop.run_until_complete(init(loop))
+    app, host, port = loop.run_until_complete(init())
     web.run_app(app, host=host, port=port)
 
 

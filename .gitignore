@@ -1,4 +1,2 @@
-#git rm -r -f --cached -- .
-
-.idea/*
-.__pycache__/*
+.idea/
+.__pycache__/

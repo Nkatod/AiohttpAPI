@@ -1,10 +1,5 @@
-<<<<<<< HEAD
-from sqlalchemy.sql.expression import text
+from datetime import datetime, timedelta
+now = datetime.now()
+expired = datetime.now() + timedelta(hours=2)
 
-t = text("SELECT * FROM users WHERE id=:user_id")
-=======
-from sqlalchemy.sql.expression import text
-
-t = text("SELECT * FROM users WHERE id=:user_id")
->>>>>>> 4b0356d9b8929b4372a010fce368bc581a064d8f
-result = connection.execute(t, user_id=12)
+a = 1

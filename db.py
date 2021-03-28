@@ -6,10 +6,10 @@ from sqlalchemy import (
 )
 from security import generate_password_hash
 
-
 DSN = "mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
 
 meta = MetaData()
+
 
 class DBEngine(object):
     def __new__(cls):
@@ -17,16 +17,15 @@ class DBEngine(object):
             cls.instance = super(DBEngine, cls).__new__(cls)
         return cls.instance
 
-    def __init__(self):
-        pass
-
     @property
     def db_engine(self):
         return self.__db_engine
 
     @db_engine.setter
     def db_engine(self, engine):
-        self.__db_engine = engine
+        if not hasattr(self, '__db_engine'):
+            self.__db_engine = engine
+
 
 _users_table = Table(
     'users', meta,
@@ -67,7 +66,7 @@ class UsersTable:
         return result
 
     @staticmethod
-    async def get_password_hash(login: str)-> str:
+    async def get_password_hash(login: str) -> str:
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
             sql_text = text('select password from users where login=:login;')
@@ -86,9 +85,7 @@ class UsersTable:
             sql_text = text('select user_id, login from users')
             result = await conn.execute(sql_text)
             for val in (await result.fetchall()):
-                self.users_list.append({'user_id':val[0], 'login':val[1]})
-
-
+                self.users_list.append({'user_id': val[0], 'login': val[1]})
 
 
 items_table = Table(

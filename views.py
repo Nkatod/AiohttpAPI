@@ -64,7 +64,6 @@ class ItemsView:
             response_obj = {'status': 'failed', 'reason': str(e)}
             return web.Response(text=json.dumps(response_obj, indent=4), status=500)
 
-
     @staticmethod
     async def delete_item(request):
         try:
@@ -73,6 +72,17 @@ class ItemsView:
         except Exception as e:
             response_obj = {'status': 'failed', 'reason': str(e)}
             return web.Response(text=json.dumps(response_obj, indent=4), status=500)
+
+    @staticmethod
+    async def get_user_items(request):
+        try:
+            response_result = await models.ItemCreator().get_user_items(request)
+            return web.Response(text=json.dumps(response_result.response_obj, indent=4), status=response_result.status)
+        except Exception as e:
+            response_obj = {'status': 'failed', 'reason': str(e)}
+            return web.Response(text=json.dumps(response_obj, indent=4), status=500)
+
+
 
 async def exception_handler(request):
     raise NotImplementedError

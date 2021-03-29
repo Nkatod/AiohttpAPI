@@ -137,6 +137,19 @@ class ItemCreator(Creator):
             return ResponseResult(500, {'status': 'failed', 'reason': f'cant delete item {item.item_id} : Internal error'})
 
 
+    async def get_user_items(self, request) -> ResponseResult:
+        token = request.query['token']
+        response_result, user = security.get_user_by_token(token)
+        if response_result.status != 200:
+            return response_result
+        await user.get_items()
+        items_list = []
+        for val in user.items:
+            items_list.append(val.to_json())
+        return ResponseResult(200, {'status': 'success', 'items_list': items_list})
+
+
+
 async def authenticate_by_login_password(login: str, password: str) -> (ResponseResult, User):
     return await security.authenticate_by_login_password(login, password)
 
@@ -146,5 +159,5 @@ async def get_all_users() -> list:
     users_table = db.UsersTable()
     await users_table.get_all_users()
     for val in users_table.users_list:
-        users_list.append(User(user_id=val['user_id'], login=val['login']).toJson())
+        users_list.append(User(user_id=val['user_id'], login=val['login']).to_json())
     return users_list

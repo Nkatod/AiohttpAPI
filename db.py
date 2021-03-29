@@ -143,7 +143,7 @@ items_transport = Table(
 )
 
 tables_list = [_users_table,
-               items_table,
+               _items_table,
                token_keys,
                items_transport]
 

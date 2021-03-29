@@ -26,7 +26,7 @@ class UsersView:
     @staticmethod
     async def get_all_users(request):
         try:
-            users_list = await models.UserCreator.get_all_users()
+            users_list = await models.get_all_users()
             response_obj = {'status': 'success', 'users_list': users_list}
             return web.Response(text=json.dumps(response_obj, indent=4), status=200)
         except Exception as e:

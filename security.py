@@ -22,7 +22,6 @@ class Authenticator(ABC):
     def authenticate(self, credentials: Credentials) -> (ResponseResult, User):
         pass
 
-
 class Tokens(object):
     def __new__(cls):
         if not hasattr(cls, 'instance'):
@@ -92,6 +91,15 @@ def create_new_user_token(user: User) -> Token:
     letters = string.ascii_lowercase + string.ascii_uppercase + string.digits
     random_token = ''.join(choice(letters) for i in range(80))
     new_token = Token(random_token, user)
+
+    #delete all previous user tokens
+    old_user_tokens_list = []
+    for token in Tokens().values():
+        if token.user.user_id == user.user_id:
+            old_user_tokens_list.append(token.token)
+    for old_token in old_user_tokens_list:
+        Tokens().pop(old_token, None)
+
     Tokens()[new_token.token] = new_token
     return new_token
 

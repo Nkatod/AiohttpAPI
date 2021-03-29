@@ -88,14 +88,34 @@ class UsersTable:
                 self.users_list.append({'user_id': val[0], 'login': val[1]})
 
 
-items_table = Table(
+_items_table = Table(
     'items', meta,
 
     Column('item_id', Integer, primary_key=True),
+    Column('attr1', String(50), nullable=False),
     Column('user_id',
            Integer,
            ForeignKey('users.user_id', ondelete='CASCADE'))
 )
+
+class ItemsTable:
+    @property
+    def items_table(self):
+        return _items_table
+
+    @staticmethod
+    async def create_new_item(user_id, attr1) -> int:
+        engine = DBEngine().db_engine
+        async with engine.acquire() as conn:
+            sql_text = text('INSERT INTO items (user_id, attr1) VALUES(:user_id, :attr1);')
+            result = await conn.execute(sql_text, user_id=user_id, attr1=attr1)
+            await conn.execute('commit')
+        return result
+
+
+
+
+
 
 token_keys = Table(
     'tokens', meta,

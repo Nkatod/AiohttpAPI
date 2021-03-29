@@ -34,8 +34,6 @@ class Tokens(object):
         return self.__tokens_table
 
 
-
-
 class Token:
     def __init__(self, token: str, user: User):
         self.expired = datetime.now() + timedelta(hours=TOKEN_LIVE_HOURS)
@@ -45,12 +43,10 @@ class Token:
     def is_alive(self) -> bool:
         return self.expired > datetime.now()
 
-    def toJson(self):
+    def to_json(self):
         return {'token': self.token,
                 'login': str(self.user.login),
                 'expired': str(self.expired), }
-
-
 
 
 class LoginCredentials(Credentials):
@@ -114,7 +110,8 @@ def check_password_hash(encoded: str, password: str) -> bool:
     is_correct = bcrypt.hashpw(password, hashed) == hashed
     return is_correct
 
-def get_user_by_token(token_str:str)-> (ResponseResult, User):
+
+def get_user_by_token(token_str: str) -> (ResponseResult, User):
     if not token_str in Tokens():
         return ResponseResult(401, {'status': 'failed', 'reason': 'Unauthorized'}), User(None)
     token = Tokens()[token_str]

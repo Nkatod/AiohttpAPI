@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 from sqlalchemy import create_engine, MetaData
 
-from db import tables_list, _users_table, items_table, DSN
+from db import tables_list, _users_table, DSN
 from utils import DEFAULT_CONFIG_PATH, load_config
 from security import generate_password_hash
 

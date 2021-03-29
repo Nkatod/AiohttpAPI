@@ -44,7 +44,7 @@ class UsersView:
                 return web.Response(text=json.dumps(response_result.response_obj, indent=4),
                                     status=response_result.status)
 
-            response_obj = {'status': 'success', 'token': curr_user.token.toJson()}
+            response_obj = {'status': 'success', 'token': curr_user.token.to_json()}
             return web.Response(text=json.dumps(response_obj, indent=4), status=200)
         except Exception as e:
             response_obj = {'status': 'failed', 'reason': str(e)}
@@ -59,8 +59,17 @@ class ItemsView:
             if response_result.status != 200:
                 return web.Response(text=json.dumps(response_result.response_obj, indent=4),
                                     status=response_result.status)
-            response_obj = {'status': 'success', 'item': item.toJson()}
-            return web.Response(text=json.dumps(response_obj, indent=4), status=200)
+            return web.Response(text=json.dumps(response_result.response_obj, indent=4), status=response_result.status)
+        except Exception as e:
+            response_obj = {'status': 'failed', 'reason': str(e)}
+            return web.Response(text=json.dumps(response_obj, indent=4), status=500)
+
+
+    @staticmethod
+    async def delete_item(request):
+        try:
+            response_result = await models.ItemCreator().delete_item(request)
+            return web.Response(text=json.dumps(response_result.response_obj, indent=4), status=response_result.status)
         except Exception as e:
             response_obj = {'status': 'failed', 'reason': str(e)}
             return web.Response(text=json.dumps(response_obj, indent=4), status=500)

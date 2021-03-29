@@ -103,8 +103,7 @@ class ItemsTable:
     def items_table(self):
         return _items_table
 
-    @staticmethod
-    async def create_new_item(user_id, attr1) -> int:
+    async def create_new_item(self, user_id, attr1:str):
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
             sql_text = text('INSERT INTO items (user_id, attr1) VALUES(:user_id, :attr1);')
@@ -112,10 +111,23 @@ class ItemsTable:
             await conn.execute('commit')
         return result
 
+    async def delete_item(self, user_id:str, item_id:str):
+        engine = DBEngine().db_engine
+        async with engine.acquire() as conn:
+            sql_text = text('DELETE FROM items where item_id = :item_id and user_id = :user_id ;')
+            result = await conn.execute(sql_text, user_id=user_id, item_id=item_id)
+            await conn.execute('commit')
+        return result
 
-
-
-
+    async def get_user_items(self, user_id) -> list:
+        engine = DBEngine().db_engine
+        item_list = []
+        async with engine.acquire() as conn:
+            sql_text = text('select item_id, attr1 from items where user_id = :user_id ;')
+            result = await conn.execute(sql_text, user_id=user_id)
+            for val in (await result.fetchall()):
+                item_list.append({'item_id': val[0], 'attr1': val[1]})
+        return item_list
 
 token_keys = Table(
     'tokens', meta,

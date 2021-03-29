@@ -41,13 +41,21 @@ class User:
         self.login = login
         self.password = password
         self.token = None
+        self.items = []
 
     def user_authorized(self) -> bool:
         if self.token is None:
             return False
         return self.token.is_alive()
 
-    def toJson(self):
+    async def get_items(self):
+        item_list = await db.ItemsTable().get_user_items(self.user_id)
+        self.items = []
+        for row in item_list:
+            self.items.append(Item(item_id=row['item_id'], user=self, attribute=row['attr1']))
+
+
+    def to_json(self):
         return {'user_id': self.user_id,
                 'login': self.login}
 
@@ -73,8 +81,18 @@ class UserCreator(Creator):
 
 
 class Item:
-    def __init__(self):
-        pass
+    def __init__(self, item_id: int = None, user: User = None, attribute: str = None):
+        self.item_id = item_id
+        self.user = user
+        self.attribute = attribute
+
+    def to_json(self):
+        return {'item_id': self.item_id,
+                'attributes': self.attribute}
+
+    async def delete_item(self) -> bool:
+        item_result = await db.ItemsTable().delete_item(self.user.user_id, self.item_id)
+        return item_result.rowcount > 0
 
 
 class ItemCreator(Creator):
@@ -84,7 +102,39 @@ class ItemCreator(Creator):
         response_result, user = security.get_user_by_token(token)
         if response_result.status != 200:
             return response_result, Item()
-        return response_result, Item()
+        item_result = await db.ItemsTable().create_new_item(user.user_id, attributes)
+        if item_result.rowcount != 1:
+            return ResponseResult(500, {'status': 'failed', 'reason': 'error adding new item'}), Item()
+        new_item = Item(item_id=item_result.lastrowid, user=user, attribute=attributes)
+        response_result = ResponseResult(200,
+                                         {'status': 'success',
+                                          'item_id': new_item.item_id,
+                                          'attributes': new_item.attribute, })
+        return response_result, new_item
+
+    async def delete_item(self, request) -> ResponseResult:
+        id_delete = int(request.match_info['item_id'])
+        token = request.query['token']
+        response_result, user = security.get_user_by_token(token)
+        if response_result.status != 200:
+            return response_result
+        await user.get_items()
+
+        item_found = False
+        for item in user.items:
+            if item.item_id == id_delete:
+                item_found = True
+                break
+
+        if not item_found:
+            return ResponseResult(500, {'status': 'failed', 'reason': f'Item {str(id_delete)} not found for user {user.login}'})
+
+        item_deleted = await item.delete_item()
+        if item_deleted:
+            user.items.remove(item)
+            return ResponseResult(200, {'status': 'success'})
+        else:
+            return ResponseResult(500, {'status': 'failed', 'reason': f'cant delete item {item.item_id} : Internal error'})
 
 
 async def authenticate_by_login_password(login: str, password: str) -> (ResponseResult, User):

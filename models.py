@@ -1,10 +1,11 @@
 import db
 import security
 from abc import ABC, abstractmethod
+from string import ascii_lowercase, ascii_uppercase, digits
+from random import choice
 
 
 class APIResponse(ABC):
-    '''API response'''
     pass
 
 
@@ -27,14 +28,15 @@ class ResponseResult(APIResponse):
 
 
 class User:
-    async def is_exists(self) -> bool:
-        if len(self.login) == 0:
-            raise ValueError('login is empty')
+    async def check_user_by_login(self) -> bool:
         result = await db.UsersTable.check_user_if_exists(self.login)
         if result is None:
             return False
         self.user_id = result
         return True
+
+    async def is_exists(self) -> bool:
+        return await self.check_user_by_login()
 
     def __init__(self, login, user_id=0, password=''):
         self.user_id = user_id
@@ -42,6 +44,9 @@ class User:
         self.password = password
         self.token = None
         self.items = []
+
+    def __eq__(self, other):
+        return self.user_id == other.user_id
 
     def user_authorized(self) -> bool:
         if self.token is None:
@@ -54,6 +59,13 @@ class User:
         for row in item_list:
             self.items.append(Item(item_id=row['item_id'], user=self, attribute=row['attr1']))
 
+    async def find_item_by_id(self, item_id):
+        if len(self.items) == 0:
+            await self.get_items()
+        for item in self.items:
+            if item.item_id == item_id:
+                return item
+        return None
 
     def to_json(self):
         return {'user_id': self.user_id,
@@ -63,7 +75,7 @@ class User:
 class UserCreator(Creator):
     async def create_new_user(self, user_name: str, password: str) -> (ResponseResult, User):
         new_user = User(login=user_name)
-        user_already_exists = await new_user.is_exists()
+        user_already_exists = await new_user.check_user_by_login()
         if user_already_exists:
             response_result = ResponseResult(500, {'status': 'failed', 'reason': 'this login has already existed!'})
             return response_result, new_user
@@ -80,11 +92,37 @@ class UserCreator(Creator):
         return response_result, new_user
 
 
-class Item:
+class ReferenceToTransfer:
+    def __init__(self, sender: User, receiver: User):
+        self.reference = self._generate_ref()
+        self.sender = sender
+        self.receiver = receiver
+        self.response_status: ResponseResult = None
+
+    def _generate_ref(self):
+        letters = ascii_lowercase + ascii_uppercase + digits
+        random_token = ''.join(choice(letters) for _ in range(80))
+        return random_token
+
+
+class MovableToAnotherUserInterface(ABC):
+    @abstractmethod
+    async def create_reference_to_move(self, user_receiver: User) -> ReferenceToTransfer:
+        pass
+
+    @abstractmethod
+    async def move_to_user(self, reference: ReferenceToTransfer) -> ResponseResult:
+        pass
+
+
+class Item(MovableToAnotherUserInterface):
     def __init__(self, item_id: int = None, user: User = None, attribute: str = None):
         self.item_id = item_id
         self.user = user
         self.attribute = attribute
+
+    def __eq__(self, other):
+        return self.item_id == other.item_id
 
     def to_json(self):
         return {'item_id': self.item_id,
@@ -93,6 +131,20 @@ class Item:
     async def delete_item(self) -> bool:
         item_result = await db.ItemsTable().delete_item(self.user.user_id, self.item_id)
         return item_result.rowcount > 0
+
+    async def create_reference_to_move(self, user_receiver: User) -> ReferenceToTransfer:
+        ref = ReferenceToTransfer(self.user, user_receiver)
+        query_result = await db.ItemsTransportTable().create_send_to(ref.reference,
+                                                                     user_receiver.user_id,
+                                                                     self.user.user_id)
+        if len(query_result) > 0:
+            ref.response_status = ResponseResult(200, {'status': 'success', 'refrence_for_accept': ref.reference})
+        else:
+            ref.response_status = ResponseResult(500, {'status': 'failed', 'reason': 'error adding new transfer in DB'})
+        return ref
+
+    async def move_to_user(self, reference: ReferenceToTransfer) -> ResponseResult:
+        pass
 
 
 class ItemCreator(Creator):
@@ -121,21 +173,24 @@ class ItemCreator(Creator):
         await user.get_items()
 
         item_found = False
+        item_for_delete = None
         for item in user.items:
             if item.item_id == id_delete:
                 item_found = True
+                item_for_delete = item
                 break
 
         if not item_found:
-            return ResponseResult(500, {'status': 'failed', 'reason': f'Item {str(id_delete)} not found for user {user.login}'})
+            return ResponseResult(500, {'status': 'failed',
+                                        'reason': f'Item {str(id_delete)} not found for user {user.login}'})
 
-        item_deleted = await item.delete_item()
+        item_deleted = await item_for_delete.delete_item()
         if item_deleted:
-            user.items.remove(item)
+            user.items.remove(item_for_delete)
             return ResponseResult(200, {'status': 'success'})
         else:
-            return ResponseResult(500, {'status': 'failed', 'reason': f'cant delete item {item.item_id} : Internal error'})
-
+            return ResponseResult(500,
+                                  {'status': 'failed', 'reason': f'cant delete item {str(id_delete)} : Internal error'})
 
     async def get_user_items(self, request) -> ResponseResult:
         token = request.query['token']
@@ -148,6 +203,32 @@ class ItemCreator(Creator):
             items_list.append(val.to_json())
         return ResponseResult(200, {'status': 'success', 'items_list': items_list})
 
+    async def send_item(self, request) -> ResponseResult:
+        token = request.query['token']
+        receiver_login = request.query['login']
+        try:
+            item_id = int(request.query['item_id'])
+        except Exception as e:
+            return ResponseResult(500, {'status': 'failed',
+                                        'reason': f'item_id should be number'})
+        # check user by token
+        response_result, user = security.get_user_by_token(token)
+        if response_result.status != 200:
+            return response_result
+        # find item_id in that user
+        item_to_send = await user.find_item_by_id(item_id)
+        if item_to_send is None:
+            return ResponseResult(500, {'status': 'failed',
+                                        'reason': f'Item {str(item_id)} not found for user {user.login}'})
+        # find user receiver
+        user_receiver = User(receiver_login)
+        if not await user_receiver.is_exists():
+            return ResponseResult(500, {'status': 'failed',
+                                        'reason': f'User reciever {str(receiver_login)} not found'})
+
+        # send item to user_receiver
+        reference_to_move = await item_to_send.create_reference_to_move(user_receiver)
+        return reference_to_move.response_status
 
 
 async def authenticate_by_login_password(login: str, password: str) -> (ResponseResult, User):

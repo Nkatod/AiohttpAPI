@@ -95,7 +95,7 @@ def create_new_user_token(user: User) -> Token:
     #delete all previous user tokens
     old_user_tokens_list = []
     for token in Tokens().values():
-        if token.user.user_id == user.user_id:
+        if token.user == user:
             old_user_tokens_list.append(token.token)
     for old_token in old_user_tokens_list:
         Tokens().pop(old_token, None)

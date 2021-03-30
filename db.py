@@ -2,9 +2,10 @@ from aiomysql.sa import create_engine
 from sqlalchemy.sql.expression import text
 from sqlalchemy import (
     MetaData, Table, Column, ForeignKey,
-    Integer, String, Date, Boolean
+    Integer, String, Boolean
 )
 from security import generate_password_hash
+from pandas import DataFrame
 
 DSN = "mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
 
@@ -15,6 +16,7 @@ class DBEngine(object):
     def __new__(cls):
         if not hasattr(cls, 'instance'):
             cls.instance = super(DBEngine, cls).__new__(cls)
+            cls.__db_engine = None
         return cls.instance
 
     @property
@@ -23,8 +25,7 @@ class DBEngine(object):
 
     @db_engine.setter
     def db_engine(self, engine):
-        if not hasattr(self, '__db_engine'):
-            self.__db_engine = engine
+        self.__db_engine = engine
 
 
 _users_table = Table(
@@ -98,12 +99,13 @@ _items_table = Table(
            ForeignKey('users.user_id', ondelete='CASCADE'))
 )
 
+
 class ItemsTable:
     @property
     def items_table(self):
         return _items_table
 
-    async def create_new_item(self, user_id, attr1:str):
+    async def create_new_item(self, user_id, attr1: str):
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
             sql_text = text('INSERT INTO items (user_id, attr1) VALUES(:user_id, :attr1);')
@@ -111,7 +113,7 @@ class ItemsTable:
             await conn.execute('commit')
         return result
 
-    async def delete_item(self, user_id:str, item_id:str):
+    async def delete_item(self, user_id: int, item_id: int):
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
             sql_text = text('DELETE FROM items where item_id = :item_id and user_id = :user_id ;')
@@ -129,16 +131,6 @@ class ItemsTable:
                 item_list.append({'item_id': val[0], 'attr1': val[1]})
         return item_list
 
-token_keys = Table(
-    'tokens', meta,
-
-    Column('token_id', Integer, primary_key=True),
-    Column('token', String(100), nullable=False),
-    Column('Expires', Date, nullable=False),
-    Column('user_id',
-           Integer,
-           ForeignKey('users.user_id', ondelete='CASCADE'))
-)
 
 items_transport = Table(
     'itemsTransport', meta,
@@ -154,9 +146,30 @@ items_transport = Table(
            ForeignKey('users.user_id', ondelete='CASCADE'))
 )
 
+
+class ItemsTransportTable:
+    async def create_send_to(self, reference: str, user_receiver_id: int, user_sender_id: int) -> DataFrame:
+        engine = DBEngine().db_engine
+        result = DataFrame()
+        async with engine.acquire() as conn:
+            sql_text = text('INSERT INTO itemsTransport (reference, user_sender, user_receiver, confirmed) '
+                            'VALUES(:reference, :user_sender, :user_receiver, :confirmed) ;')
+            result_query = await conn.execute(sql_text,
+                                              reference=reference,
+                                              user_sender=user_sender_id,
+                                              user_receiver=user_receiver_id,
+                                              confirmed=False)
+            await conn.execute('COMMIT')
+            if result_query.rowcount == 1:
+                result = DataFrame([{'reference': reference,
+                                     'user_sender': user_sender_id,
+                                     'user_receiver': user_receiver_id,
+                                     'confirmed': False}])
+        return result
+
+
 tables_list = [_users_table,
                _items_table,
-               token_keys,
                items_transport]
 
 

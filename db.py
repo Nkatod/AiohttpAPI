@@ -77,6 +77,17 @@ class UsersTable:
             res = await result.fetchall()
         return res[0][0]
 
+    async def get_login_by_id(self, user_id: int) -> DataFrame:
+        engine = DBEngine().db_engine
+        async with engine.acquire() as conn:
+            sql_text = text('SELECT login from users where user_id = :user_id;')
+            result_query = await conn.execute(sql_text, user_id=user_id)
+            item_list = []
+            for val in (await result_query.fetchall()):
+                item_list.append({'login': val[0], })
+            result = DataFrame(item_list)
+        return result
+
     def __init__(self):
         self.users_list = []
 
@@ -96,7 +107,8 @@ _items_table = Table(
     Column('attr1', String(50), nullable=False),
     Column('user_id',
            Integer,
-           ForeignKey('users.user_id', ondelete='CASCADE'))
+           ForeignKey('users.user_id', ondelete='CASCADE'),
+           nullable=False)
 )
 
 
@@ -110,7 +122,7 @@ class ItemsTable:
         async with engine.acquire() as conn:
             sql_text = text('INSERT INTO items (user_id, attr1) VALUES(:user_id, :attr1);')
             result = await conn.execute(sql_text, user_id=user_id, attr1=attr1)
-            await conn.execute('commit')
+            await conn.execute('COMMIT')
         return result
 
     async def delete_item(self, user_id: int, item_id: int):
@@ -118,7 +130,7 @@ class ItemsTable:
         async with engine.acquire() as conn:
             sql_text = text('DELETE FROM items where item_id = :item_id and user_id = :user_id ;')
             result = await conn.execute(sql_text, user_id=user_id, item_id=item_id)
-            await conn.execute('commit')
+            await conn.execute('COMMIT')
         return result
 
     async def get_user_items(self, user_id) -> list:
@@ -136,25 +148,33 @@ items_transport = Table(
     'itemsTransport', meta,
 
     Column('transport_id', Integer, primary_key=True),
+    Column('item_id',
+           Integer,
+           ForeignKey('items.item_id', ondelete='CASCADE'),
+           nullable=False),
     Column('reference', String(150), nullable=False),
     Column('confirmed', Boolean, nullable=False, default=False),
     Column('user_sender',
            Integer,
-           ForeignKey('users.user_id', ondelete='CASCADE')),
+           ForeignKey('users.user_id', ondelete='CASCADE'),
+           nullable=False),
     Column('user_receiver',
            Integer,
-           ForeignKey('users.user_id', ondelete='CASCADE'))
+           ForeignKey('users.user_id', ondelete='CASCADE'),
+           nullable=False)
 )
 
 
 class ItemsTransportTable:
-    async def create_send_to(self, reference: str, user_receiver_id: int, user_sender_id: int) -> DataFrame:
+    async def create_send_to(self, reference: str, user_receiver_id: int, user_sender_id: int,
+                             item_id: int) -> DataFrame:
         engine = DBEngine().db_engine
         result = DataFrame()
         async with engine.acquire() as conn:
-            sql_text = text('INSERT INTO itemsTransport (reference, user_sender, user_receiver, confirmed) '
-                            'VALUES(:reference, :user_sender, :user_receiver, :confirmed) ;')
+            sql_text = text('INSERT INTO itemsTransport (item_id, reference, user_sender, user_receiver, confirmed) '
+                            'VALUES(:item_id, :reference, :user_sender, :user_receiver, :confirmed) ;')
             result_query = await conn.execute(sql_text,
+                                              item_id=item_id,
                                               reference=reference,
                                               user_sender=user_sender_id,
                                               user_receiver=user_receiver_id,
@@ -162,9 +182,71 @@ class ItemsTransportTable:
             await conn.execute('COMMIT')
             if result_query.rowcount == 1:
                 result = DataFrame([{'reference': reference,
+                                     'item_id': item_id,
                                      'user_sender': user_sender_id,
                                      'user_receiver': user_receiver_id,
                                      'confirmed': False}])
+        return result
+
+    async def get_transfer(self, reference: str, user_receiver_id: int) -> DataFrame:
+        engine = DBEngine().db_engine
+        result = DataFrame()
+        async with engine.acquire() as conn:
+            sql_text = text('SELECT reference, item_id, user_sender, user_receiver, confirmed '
+                            'FROM itemsTransport where user_receiver = :user_receiver and reference = :reference ;')
+            result_query = await conn.execute(sql_text,
+                                              reference=reference,
+                                              user_receiver=user_receiver_id)
+            item_list = []
+            for val in (await result_query.fetchall()):
+                item_list.append({'reference': val[0],
+                                  'item_id': val[1],
+                                  'user_sender': val[2],
+                                  'user_receiver': val[3],
+                                  'confirmed': val[4]})
+            result = DataFrame(item_list)
+        return result
+
+    async def move_to(self, reference: str, user_receiver_id: int, user_sender_id: int,
+                      item_id: int) -> DataFrame:
+        engine = DBEngine().db_engine
+        result = DataFrame()
+        try:
+            async with engine.acquire() as conn:
+                sql_text = text('UPDATE itemsTransport '
+                                'SET confirmed = 1 '
+                                'WHERE reference = :reference ;')
+                result_query_update = await conn.execute(sql_text, reference=reference)
+                if result_query_update.rowcount != 1:
+                    # Error of changing owner
+                    return result
+                # change owner of item
+                sql_text = text('UPDATE items '
+                                'SET user_id = :user_id '
+                                'WHERE item_id = :item_id ;')
+                result_change_owner = await conn.execute(sql_text, user_id=user_receiver_id, item_id=item_id)
+                if result_change_owner.rowcount != 1:
+                    # Error of changing owner
+                    return result
+
+                sql_text = text('DELETE FROM itemsTransport '
+                                'WHERE confirmed = 0 '
+                                'and item_id = :item_id '
+                                'and user_sender = :user_sender '
+                                'and user_receiver = :user_receiver ;')
+                result_query_delete = await conn.execute(sql_text,
+                                                         item_id=item_id,
+                                                         user_sender=user_sender_id,
+                                                         user_receiver=user_receiver_id)
+                await conn.execute('COMMIT')
+
+                result = DataFrame([{'reference': reference,
+                                     'item_id': item_id,
+                                     'user_sender': user_sender_id,
+                                     'user_receiver': user_receiver_id,
+                                     'confirmed': True}])
+        except Exception as e:
+            pass
         return result
 
 

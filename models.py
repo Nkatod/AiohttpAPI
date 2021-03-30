@@ -73,6 +73,13 @@ class User:
 
 
 class UserCreator(Creator):
+
+    async def get_user_by_id(self, user_id: int) -> User:
+        result = await db.UsersTable().get_login_by_id(user_id)
+        if len(result) != 1:
+            return User('')
+        return User(result['login'][0])
+
     async def create_new_user(self, user_name: str, password: str) -> (ResponseResult, User):
         new_user = User(login=user_name)
         user_already_exists = await new_user.check_user_by_login()
@@ -93,11 +100,16 @@ class UserCreator(Creator):
 
 
 class ReferenceToTransfer:
-    def __init__(self, sender: User, receiver: User):
-        self.reference = self._generate_ref()
+    def __init__(self, sender: User, receiver: User, item_to_move, reference=None):
+        if reference is None:
+            self.reference = self._generate_ref()
+        else:
+            self.reference = reference
+        self.item_to_move = item_to_move
         self.sender = sender
         self.receiver = receiver
-        self.response_status: ResponseResult = None
+        self.response_status: ResponseResult = ResponseResult(500, {'status': 'failed',
+                                                                    'reason': 'empty ReferenceToTransfer'})
 
     def _generate_ref(self):
         letters = ascii_lowercase + ascii_uppercase + digits
@@ -133,24 +145,31 @@ class Item(MovableToAnotherUserInterface):
         return item_result.rowcount > 0
 
     async def create_reference_to_move(self, user_receiver: User) -> ReferenceToTransfer:
-        ref = ReferenceToTransfer(self.user, user_receiver)
+        ref = ReferenceToTransfer(self.user, user_receiver, self)
         query_result = await db.ItemsTransportTable().create_send_to(ref.reference,
                                                                      user_receiver.user_id,
-                                                                     self.user.user_id)
+                                                                     self.user.user_id,
+                                                                     self.item_id)
         if len(query_result) > 0:
-            ref.response_status = ResponseResult(200, {'status': 'success', 'refrence_for_accept': ref.reference})
+            ref.response_status = ResponseResult(200, {'status': 'success', 'reference_for_accept': ref.reference})
         else:
             ref.response_status = ResponseResult(500, {'status': 'failed', 'reason': 'error adding new transfer in DB'})
         return ref
 
-    async def move_to_user(self, reference: ReferenceToTransfer) -> ResponseResult:
-        pass
+    async def move_to_user(self, ref: ReferenceToTransfer) -> ResponseResult:
+        query_result = await db.ItemsTransportTable().move_to(ref.reference,
+                                                              ref.receiver.user_id,
+                                                              ref.sender.user_id,
+                                                              ref.item_to_move.item_id)
+        if len(query_result) != 1:
+            return ResponseResult(500, {'status': 'failed', 'reason': 'error of object transfer in DB'})
+        return ResponseResult(200, {'status': 'success'})
 
 
 class ItemCreator(Creator):
     async def create_new_item(self, request) -> (ResponseResult, Item):
-        token = request.query['token']
-        attributes = request.query['attributes']
+        token = str(request.query['token'])
+        attributes = str(request.query['attributes'])
         response_result, user = security.get_user_by_token(token)
         if response_result.status != 200:
             return response_result, Item()
@@ -166,7 +185,7 @@ class ItemCreator(Creator):
 
     async def delete_item(self, request) -> ResponseResult:
         id_delete = int(request.match_info['item_id'])
-        token = request.query['token']
+        token = str(request.query['token'])
         response_result, user = security.get_user_by_token(token)
         if response_result.status != 200:
             return response_result
@@ -193,7 +212,7 @@ class ItemCreator(Creator):
                                   {'status': 'failed', 'reason': f'cant delete item {str(id_delete)} : Internal error'})
 
     async def get_user_items(self, request) -> ResponseResult:
-        token = request.query['token']
+        token = str(request.query['token'])
         response_result, user = security.get_user_by_token(token)
         if response_result.status != 200:
             return response_result
@@ -204,13 +223,10 @@ class ItemCreator(Creator):
         return ResponseResult(200, {'status': 'success', 'items_list': items_list})
 
     async def send_item(self, request) -> ResponseResult:
-        token = request.query['token']
-        receiver_login = request.query['login']
-        try:
-            item_id = int(request.query['item_id'])
-        except Exception as e:
-            return ResponseResult(500, {'status': 'failed',
-                                        'reason': f'item_id should be number'})
+        token = str(request.query['token'])
+        receiver_login = str(request.query['login'])
+        item_id = int(request.query['item_id'])
+
         # check user by token
         response_result, user = security.get_user_by_token(token)
         if response_result.status != 200:
@@ -224,11 +240,47 @@ class ItemCreator(Creator):
         user_receiver = User(receiver_login)
         if not await user_receiver.is_exists():
             return ResponseResult(500, {'status': 'failed',
-                                        'reason': f'User reciever {str(receiver_login)} not found'})
+                                        'reason': f'User receiver {str(receiver_login)} not found'})
 
         # send item to user_receiver
         reference_to_move = await item_to_send.create_reference_to_move(user_receiver)
         return reference_to_move.response_status
+
+    async def move_item(self, request) -> ResponseResult:
+        token = str(request.query['token'])
+        reference = str(request.query['reference'])
+
+        # check user-receiver
+        response_result, user_receiver = security.get_user_by_token(token)
+        if response_result.status != 200:
+            return response_result
+
+        query_result = await db.ItemsTransportTable().get_transfer(reference, user_receiver.user_id)
+        if len(query_result) == 0:
+            return ResponseResult(500, {'status': 'failed',
+                                        'reason': f'Reference {reference} '
+                                                  f'not found for user receiver {str(user_receiver.user_id)}'})
+        elif len(query_result) > 1:
+            return ResponseResult(500, {'status': 'failed',
+                                        'reason': f'Found many records for this reference'})
+        # User sender should have this item
+        user_sender_id = int(query_result['user_sender'][0])
+        user_sender = await UserCreator().get_user_by_id(user_sender_id)
+        if not await user_sender.is_exists():
+            return ResponseResult(500, {'status': 'failed',
+                                        'reason': f'User sender id {str(user_sender_id)} not found'})
+        # find item_id in that user
+        item_id = int(query_result['item_id'][0])
+        item_to_send = await user_sender.find_item_by_id(item_id)
+        if item_to_send is None:
+            return ResponseResult(500, {'status': 'failed',
+                                        'reason': f'Item {str(item_id)} not found for user {user_sender.login}'})
+        ref = ReferenceToTransfer(sender=user_sender,
+                                  receiver=user_receiver,
+                                  item_to_move=item_to_send,
+                                  reference=reference)
+        response = await item_to_send.move_to_user(ref)
+        return response
 
 
 async def authenticate_by_login_password(login: str, password: str) -> (ResponseResult, User):

@@ -11,5 +11,6 @@ def setup_routes(app):
     router.add_delete('/items/{item_id}', views.ItemsView.delete_item)
     router.add_get('/items', views.ItemsView.get_user_items)
     router.add_post('/send', views.ItemsView.send_item)
+    router.add_get('/get', views.ItemsView.move_item)
     router.add_route('GET', '/exc', views.exception_handler,
                      name='exc_example')

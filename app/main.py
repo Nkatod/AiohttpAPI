@@ -1,19 +1,19 @@
 from aiohttp import web
 import asyncio
 import logging
-import aiohttp_debugtoolbar
-from utils import load_config, DEFAULT_CONFIG_PATH
-from db import init_db
-from routes import setup_routes
+# import aiohttp_debugtoolbar
+from app.utils import load_config, DEFAULT_CONFIG_PATH
+from app.db import init_db
+from app.routes import setup_routes
 
 
 
-async def init():
+async def init_app():
     conf = load_config(DEFAULT_CONFIG_PATH)
 
     app = web.Application()
     app['config'] = conf
-    aiohttp_debugtoolbar.setup(app)
+    # aiohttp_debugtoolbar.setup(app)
     db_pool = await init_db(app)
     setup_routes(app)
     host, port = conf['host'], conf['port']
@@ -24,7 +24,7 @@ def main():
     logging.basicConfig(level=logging.WARNING)
 
     loop = asyncio.get_event_loop()
-    app, host, port = loop.run_until_complete(init())
+    app, host, port = loop.run_until_complete(init_app())
     web.run_app(app, host=host, port=port)
 
 

@@ -1,4 +1,4 @@
-import views
+import app.views as views
 
 
 def setup_routes(app):

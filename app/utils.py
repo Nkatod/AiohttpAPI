@@ -2,7 +2,7 @@ import trafaret as t
 import yaml
 import pathlib
 
-PROJ_ROOT = pathlib.Path(__file__).parent
+PROJ_ROOT = pathlib.Path(__file__).parent.parent
 DEFAULT_CONFIG_PATH = PROJ_ROOT / 'config' / 'config.yml'
 
 CONFIG_TRAFARET = t.Dict(

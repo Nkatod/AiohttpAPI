@@ -4,8 +4,8 @@ from sqlalchemy import (
     MetaData, Table, Column, ForeignKey,
     Integer, String, Boolean
 )
-from security import generate_password_hash
 from pandas import DataFrame
+from app.security import generate_password_hash
 
 DSN = "mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
 
@@ -43,17 +43,18 @@ class UsersTable:
         return _users_table
 
     @staticmethod
-    async def check_user_if_exists(user_name) -> int:
+    async def check_user_if_exists(login: str) -> DataFrame:
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
             sql_text = text('select user_id from users where login=:login;')
-            q_result = await conn.execute(sql_text, login=user_name)
-            if q_result.rowcount > 1:
+            result_query = await conn.execute(sql_text, login=login)
+            if result_query.rowcount > 1:
                 raise ValueError('DB Many users found')
-            res = await q_result.fetchall()
-            result = None
-            if q_result.rowcount == 1:
-                result = res[0][0]
+            item_list = []
+            for val in (await result_query.fetchall()):
+                item_list.append({'user_id': val[0],
+                                  'login': login})
+            result = DataFrame(item_list)
         return result
 
     @staticmethod

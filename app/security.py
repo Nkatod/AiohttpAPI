@@ -2,9 +2,9 @@ import base64
 import bcrypt
 from random import choice
 import string
-from models import User, ResponseResult
+from app.base_models import ResponseResult
 from abc import ABC, abstractmethod
-import db
+import app.db as db
 from datetime import datetime, timedelta
 
 TOKEN_LIVE_HOURS = 2
@@ -19,8 +19,9 @@ class Authenticator(ABC):
     '''Abstract authenticator'''
 
     @abstractmethod
-    def authenticate(self, credentials: Credentials) -> (ResponseResult, User):
+    def authenticate(self, credentials: Credentials) -> ResponseResult:
         pass
+
 
 class Tokens(object):
     def __new__(cls):
@@ -34,17 +35,18 @@ class Tokens(object):
 
 
 class Token:
-    def __init__(self, token: str, user: User):
+    def __init__(self, token: str, user_id: int, login: str):
         self.expired = datetime.now() + timedelta(hours=TOKEN_LIVE_HOURS)
         self.token = token
-        self.user = user
+        self.user_id = user_id
+        self.login = login
 
     def is_alive(self) -> bool:
         return self.expired > datetime.now()
 
     def to_json(self):
         return {'token': self.token,
-                'login': str(self.user.login),
+                'login': str(self.login),
                 'expired': str(self.expired), }
 
 
@@ -65,37 +67,44 @@ class LoginCredentials(Credentials):
 
 
 class LoginAuthennticator(Authenticator):
-    async def authenticate(self, credentials: LoginCredentials) -> (ResponseResult, User):
-        curr_user = User(login=credentials.login)
-        if not await curr_user.is_exists():
-            return ResponseResult(401, {'status': 'failed', 'reason': 'No user found'}), curr_user
+    async def authenticate(self, credentials: LoginCredentials) -> ResponseResult:
+        user_response = await self.check_user_by_login(credentials.login)
+        if not user_response.is_ok:
+            return user_response
         db_password = await db.UsersTable.get_password_hash(credentials.login)
         auth_ok = check_password_hash(db_password, credentials.password)
         if not auth_ok:
-            return ResponseResult(401, {'status': 'failed', 'reason': 'Password incorrect'}), curr_user
-        response_result = ResponseResult(200, {'status': 'success'})
-        curr_user.token = create_new_user_token(curr_user)
-        return response_result, curr_user
+            return ResponseResult(401, {'status': 'failed', 'reason': 'Password incorrect'})
+        token = create_new_user_token(user_response._response_obj['user_id'], credentials.login)
+        response_result = ResponseResult(200, {'status': 'success', 'token': token})
+        return response_result
+
+    async def check_user_by_login(self, login) -> ResponseResult:
+        result = await db.UsersTable.check_user_if_exists(login)
+        if len(result) != 1:
+            return ResponseResult(401, {'status': 'failed', 'reason': 'No user found'})
+        user_id = result['user_id'][0]
+        return ResponseResult(200, {'status': 'success', 'user_id': user_id, 'login': login})
 
 
-async def authenticate(authenicator: Authenticator, credentials: Credentials) -> (ResponseResult, User):
+async def authenticate(authenicator: Authenticator, credentials: Credentials) -> ResponseResult:
     return await authenicator().authenticate(credentials)
 
 
-async def authenticate_by_login_password(login: str, password: str) -> (ResponseResult, User):
+async def authenticate_by_login_password(login: str, password: str) -> ResponseResult:
     credentials = LoginCredentials(login, password)
     return await authenticate(LoginAuthennticator, credentials)
 
 
-def create_new_user_token(user: User) -> Token:
+def create_new_user_token(user_id: int, login: str) -> Token:
     letters = string.ascii_lowercase + string.ascii_uppercase + string.digits
     random_token = ''.join(choice(letters) for i in range(80))
-    new_token = Token(random_token, user)
+    new_token = Token(random_token, user_id, login)
 
-    #delete all previous user tokens
+    # delete all previous user tokens
     old_user_tokens_list = []
     for token in Tokens().values():
-        if token.user == user:
+        if token.user_id == user_id:
             old_user_tokens_list.append(token.token)
     for old_token in old_user_tokens_list:
         Tokens().pop(old_token, None)
@@ -104,9 +113,9 @@ def create_new_user_token(user: User) -> Token:
     return new_token
 
 
-def generate_password_hash(password: str, salt_rounds=12) -> str:
+def generate_password_hash(password: str) -> str:
     password_bin = password.encode('utf-8')
-    hashed = bcrypt.hashpw(password_bin, bcrypt.gensalt(salt_rounds))
+    hashed = bcrypt.hashpw(password_bin, bcrypt.gensalt())
     encoded = base64.b64encode(hashed)
     return encoded.decode('utf-8')
 
@@ -119,11 +128,11 @@ def check_password_hash(encoded: str, password: str) -> bool:
     return is_correct
 
 
-def get_user_by_token(token_str: str) -> (ResponseResult, User):
+def get_user_by_token(token_str: str) -> ResponseResult:
     if not token_str in Tokens():
-        return ResponseResult(401, {'status': 'failed', 'reason': 'Unauthorized'}), User(None)
+        return ResponseResult(401, {'status': 'failed', 'reason': 'Unauthorized'})
     token = Tokens()[token_str]
     if not token.is_alive():
-        return ResponseResult(401, {'status': 'failed', 'reason': 'Token expired'}), token.user
+        return ResponseResult(401, {'status': 'failed', 'reason': 'Token expired'})
 
-    return ResponseResult(200, {'status': 'success', }), token.user
+    return ResponseResult(200, {'status': 'success', })

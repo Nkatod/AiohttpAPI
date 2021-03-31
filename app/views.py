@@ -1,4 +1,4 @@
-import models
+import app.models as models
 from aiohttp import web
 import json
 

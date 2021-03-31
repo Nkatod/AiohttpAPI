@@ -1,12 +1,12 @@
 import sqlalchemy as sa
 from sqlalchemy import create_engine, MetaData
 
-from db import tables_list, _users_table, DSN
-from utils import DEFAULT_CONFIG_PATH, load_config
-from security import generate_password_hash
+from app.db import tables_list, _users_table, DSN
+from app.utils import DEFAULT_CONFIG_PATH, load_config
+from app.security import generate_password_hash
 
 ADMIN_DB_URL = DSN.format(
-    user='root', password='root_pass', database='sys',
+    user='root', password='Root_pass', database='sys',
     host='localhost', port=3306
 )
 
@@ -63,11 +63,11 @@ def test_connection(engine=user_engine):
         rs = con.execute('select 1')
     try:
         if rs.rowcount == 1:
-            print('DB RAW query success')
+            return True
         else:
-            print('DB RAW query failure')
+            return False
     except Exception as e:
-        print('DB RAW query failure', e)
+        return False
 
 
 if __name__ == '__main__':

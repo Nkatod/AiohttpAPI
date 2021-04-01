@@ -1,4 +1,4 @@
-# pytest tests/test_integration.py
+# pytest tests/test_integration.py --pdb
 
 import pytest
 from app.main import init_app

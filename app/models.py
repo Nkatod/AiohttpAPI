@@ -1,7 +1,7 @@
 import app.db as db
 from abc import ABC
 from app.base_models import ResponseResult, ReferenceToTransfer
-from app.security import get_user_by_token, authenticate_by_login_password
+from app.security import get_user_by_token, security_authenticate_by_login_password
 
 
 class Creator(ABC):
@@ -9,7 +9,9 @@ class Creator(ABC):
 
 
 class User:
-    def __init__(self, login, user_id=0, password=''):
+    def __init__(self, login, user_id: int = 0, password=''):
+        if not isinstance(user_id, int):
+            raise TypeError('user_id should be int')
         self.user_id = user_id
         self.login = login
         self.password = password
@@ -20,7 +22,7 @@ class User:
         result = await db.UsersTable.check_user_if_exists(self.login)
         if len(result) != 1:
             return False
-        self.user_id = result['user_id'][0]
+        self.user_id = int(result['user_id'][0])
         return True
 
     async def is_exists(self) -> bool:
@@ -56,10 +58,12 @@ class User:
 class UserCreator(Creator):
 
     async def get_user_by_id(self, user_id: int) -> User:
+        if not isinstance(user_id, int):
+            raise TypeError('user_id should be int')
         result = await db.UsersTable().get_login_by_id(user_id)
         if len(result) != 1:
-            return User('')
-        return User(result['login'][0])
+            raise ValueError('User not found')
+        return User(result['login'][0], user_id=user_id)
 
     async def create_new_user(self, user_name: str, password: str) -> (ResponseResult, User):
         new_user = User(login=user_name)
@@ -81,7 +85,7 @@ class UserCreator(Creator):
 
 
 class Item:
-    def __init__(self, item_id: int = None, user: User = None, attribute: str = None):
+    def __init__(self, item_id: int, user: User, attribute: str):
         self.item_id = item_id
         self.user = user
         self.attribute = attribute
@@ -120,28 +124,32 @@ class Item:
 
 
 class ItemCreator(Creator):
-    async def create_new_item(self, request) -> (ResponseResult, Item):
+    async def create_new_item(self, request) -> ResponseResult:
         token = str(request.query['token'])
         attributes = str(request.query['attributes'])
-        response_result, user = get_user_by_token(token)
-        if response_result.status != 200:
-            return response_result, Item()
-        item_result = await db.ItemsTable().create_new_item(user.user_id, attributes)
+        response_result = get_user_by_token(token)
+        if not response_result.is_ok:
+            return response_result
+        user_id = response_result.get_object('token').user_id
+        user_owner = await UserCreator().get_user_by_id(user_id)
+        item_result = await db.ItemsTable().create_new_item(user_owner.user_id, attributes)
         if item_result.rowcount != 1:
-            return ResponseResult(500, {'status': 'failed', 'reason': 'error adding new item'}), Item()
-        new_item = Item(item_id=item_result.lastrowid, user=user, attribute=attributes)
+            return ResponseResult(500, {'status': 'failed', 'reason': 'error adding new item'})
+        new_item = Item(item_id=item_result.lastrowid, user=user_owner, attribute=attributes)
         response_result = ResponseResult(200,
                                          {'status': 'success',
                                           'item_id': new_item.item_id,
                                           'attributes': new_item.attribute, })
-        return response_result, new_item
+        return response_result
 
     async def delete_item(self, request) -> ResponseResult:
         id_delete = int(request.match_info['item_id'])
         token = str(request.query['token'])
-        response_result, user = get_user_by_token(token)
-        if response_result.status != 200:
+        response_result = get_user_by_token(token)
+        if not response_result.is_ok:
             return response_result
+        user_id = response_result.get_object('token').user_id
+        user = await UserCreator().get_user_by_id(user_id)
         await user.get_items()
 
         item_found = False
@@ -166,9 +174,12 @@ class ItemCreator(Creator):
 
     async def get_user_items(self, request) -> ResponseResult:
         token = str(request.query['token'])
-        response_result, user = get_user_by_token(token)
-        if response_result.status != 200:
+
+        response_result = get_user_by_token(token)
+        if not response_result.is_ok:
             return response_result
+        user_id = response_result.get_object('token').user_id
+        user = await UserCreator().get_user_by_id(user_id)
         await user.get_items()
         items_list = []
         for val in user.items:
@@ -181,9 +192,11 @@ class ItemCreator(Creator):
         item_id = int(request.query['item_id'])
 
         # check user by token
-        response_result, user = get_user_by_token(token)
-        if response_result.status != 200:
+        response_result = get_user_by_token(token)
+        if not response_result.is_ok:
             return response_result
+        user_id = response_result.get_object('token').user_id
+        user = await UserCreator().get_user_by_id(user_id)
         # find item_id in that user
         item_to_send = await user.find_item_by_id(item_id)
         if item_to_send is None:
@@ -204,9 +217,11 @@ class ItemCreator(Creator):
         reference = str(request.query['reference'])
 
         # check user-receiver
-        response_result, user_receiver = get_user_by_token(token)
-        if response_result.status != 200:
+        response_result = get_user_by_token(token)
+        if not response_result.is_ok:
             return response_result
+        user_id = response_result.get_object('token').user_id
+        user_receiver = await UserCreator().get_user_by_id(user_id)
 
         query_result = await db.ItemsTransportTable().get_transfer(reference, user_receiver.user_id)
         if len(query_result) == 0:
@@ -236,8 +251,11 @@ class ItemCreator(Creator):
         return response
 
 
-async def authenticate_by_login_password(login: str, password: str) -> (ResponseResult, User):
-    return await authenticate_by_login_password(login, password)
+async def authenticate_by_login_password(request) -> ResponseResult:
+    login = request.query['login']
+    password = request.query['password']
+    respone = await security_authenticate_by_login_password(login, password)
+    return respone
 
 
 async def get_all_users() -> list:

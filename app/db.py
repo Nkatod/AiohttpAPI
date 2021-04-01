@@ -6,6 +6,7 @@ from sqlalchemy import (
 )
 from pandas import DataFrame
 from app.security import generate_password_hash
+import numpy as np
 
 DSN = "mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
 
@@ -35,6 +36,7 @@ _users_table = Table(
     Column('login', String(50), nullable=False),
     Column('password', String(100), nullable=False)
 )
+
 
 
 class UsersTable:
@@ -68,15 +70,18 @@ class UsersTable:
         return result
 
     @staticmethod
-    async def get_password_hash(login: str) -> str:
+    async def get_password_hash(login: str) -> DataFrame:
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
             sql_text = text('select password from users where login=:login;')
-            result = await conn.execute(sql_text, login=login)
-            if result.rowcount != 1:
+            result_query = await conn.execute(sql_text, login=login)
+            if result_query.rowcount != 1:
                 raise ValueError('DB Many users found')
-            res = await result.fetchall()
-        return res[0][0]
+            item_list = []
+            for val in (await result_query.fetchall()):
+                item_list.append({'password': val[0]})
+            result = DataFrame(item_list)
+        return result
 
     async def get_login_by_id(self, user_id: int) -> DataFrame:
         engine = DBEngine().db_engine

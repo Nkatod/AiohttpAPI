@@ -36,16 +36,10 @@ class UsersView:
     @staticmethod
     async def authorization(request):
         try:
-            login = request.query['login']
-            password = request.query['password']
-
-            response_result, curr_user = await models.authenticate_by_login_password(login, password)
-            if response_result.status != 200:
-                return web.Response(text=json.dumps(response_result.response_obj, indent=4),
-                                    status=response_result.status)
-
-            response_obj = {'status': 'success', 'token': curr_user.token.to_json()}
-            return web.Response(text=json.dumps(response_obj, indent=4), status=200)
+            response_result = await models.authenticate_by_login_password(request)
+            if response_result.is_ok:
+                response_result.response_obj['token'] = response_result.response_obj['token'].to_json()
+            return web.Response(text=json.dumps(response_result.response_obj, indent=4), status=response_result.status)
         except Exception as e:
             response_obj = {'status': 'failed', 'reason': str(e)}
             return web.Response(text=json.dumps(response_obj, indent=4), status=500)
@@ -55,7 +49,7 @@ class ItemsView:
     @staticmethod
     async def create_new_item(request):
         try:
-            response_result, item = await models.ItemCreator().create_new_item(request)
+            response_result = await models.ItemCreator().create_new_item(request)
             return web.Response(text=json.dumps(response_result.response_obj, indent=4), status=response_result.status)
         except Exception as e:
             response_obj = {'status': 'failed', 'reason': str(e)}

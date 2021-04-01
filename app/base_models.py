@@ -14,6 +14,9 @@ class ResponseResult:
         self._status = status_number
         self._response_obj = response_obj
 
+    def get_object(self, object_name:str):
+        return self._response_obj[object_name]
+
     @property
     def response_obj(self):
         return self._response_obj

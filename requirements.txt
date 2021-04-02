@@ -2,8 +2,8 @@ aiohttp==3.7.3
 SQLAlchemy==1.4.2
 aiomysql==0.0.21
 trafaret==2.1.0
-aiohttp-debugtoolbar==0.6.0
 pytest-aiohttp==0.3.0
 bcrypt==3.2.0
 pandas~=1.1.4
 PyYAML~=5.3.1
+aiohttp-swagger==1.0.15

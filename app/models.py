@@ -230,7 +230,7 @@ class ItemCreator(Creator):
                                                   f'not found for user receiver {str(user_receiver.user_id)}'})
         elif len(query_result) > 1:
             return ResponseResult(500, {'status': 'failed',
-                                        'reason': f'Found many records for this reference'})
+                                        'reason': 'Found many records for this reference'})
         # User sender should have this item
         user_sender_id = int(query_result['user_sender'][0])
         user_sender = await UserCreator().get_user_by_id(user_sender_id)
@@ -265,3 +265,17 @@ async def get_all_users() -> list:
     for val in users_table.users_list:
         users_list.append(User(user_id=val['user_id'], login=val['login']).to_json())
     return users_list
+
+
+# class APILog:
+#     class Meta:
+#         db_table = 'api_logs'
+#
+#     request_url = CharField()
+#     request_data = TextField(null=True)
+#     request_method = CharField(max_length=100)
+#     request_headers = TextField(null=True)
+#     response_text = TextField(null=True)
+#     created = DateTimeField()
+#     finished = DateTimeField()
+#     error = TextField(null=True)

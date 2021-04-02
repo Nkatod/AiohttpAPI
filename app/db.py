@@ -217,42 +217,40 @@ class ItemsTransportTable:
                       item_id: int) -> DataFrame:
         engine = DBEngine().db_engine
         result = DataFrame()
-        try:
-            async with engine.acquire() as conn:
-                sql_text = text('UPDATE itemsTransport '
-                                'SET confirmed = 1 '
-                                'WHERE reference = :reference ;')
-                result_query_update = await conn.execute(sql_text, reference=reference)
-                if result_query_update.rowcount != 1:
-                    # Error of changing owner
-                    return result
-                # change owner of item
-                sql_text = text('UPDATE items '
-                                'SET user_id = :user_id '
-                                'WHERE item_id = :item_id ;')
-                result_change_owner = await conn.execute(sql_text, user_id=user_receiver_id, item_id=item_id)
-                if result_change_owner.rowcount != 1:
-                    # Error of changing owner
-                    return result
 
-                sql_text = text('DELETE FROM itemsTransport '
-                                'WHERE confirmed = 0 '
-                                'and item_id = :item_id '
-                                'and user_sender = :user_sender '
-                                'and user_receiver = :user_receiver ;')
-                result_query_delete = await conn.execute(sql_text,
-                                                         item_id=item_id,
-                                                         user_sender=user_sender_id,
-                                                         user_receiver=user_receiver_id)
-                await conn.execute('COMMIT')
+        async with engine.acquire() as conn:
+            sql_text = text('UPDATE itemsTransport '
+                            'SET confirmed = 1 '
+                            'WHERE reference = :reference ;')
+            result_query_update = await conn.execute(sql_text, reference=reference)
+            if result_query_update.rowcount != 1:
+                # Error of changing owner
+                return result
+            # change owner of item
+            sql_text = text('UPDATE items '
+                            'SET user_id = :user_id '
+                            'WHERE item_id = :item_id ;')
+            result_change_owner = await conn.execute(sql_text, user_id=user_receiver_id, item_id=item_id)
+            if result_change_owner.rowcount != 1:
+                # Error of changing owner
+                return result
 
-                result = DataFrame([{'reference': reference,
-                                     'item_id': item_id,
-                                     'user_sender': user_sender_id,
-                                     'user_receiver': user_receiver_id,
-                                     'confirmed': True}])
-        except Exception as e:
-            pass
+            sql_text = text('DELETE FROM itemsTransport '
+                            'WHERE confirmed = 0 '
+                            'and item_id = :item_id '
+                            'and user_sender = :user_sender '
+                            'and user_receiver = :user_receiver ;')
+            result_query_delete = await conn.execute(sql_text,
+                                                     item_id=item_id,
+                                                     user_sender=user_sender_id,
+                                                     user_receiver=user_receiver_id)
+            await conn.execute('COMMIT')
+
+            result = DataFrame([{'reference': reference,
+                                 'item_id': item_id,
+                                 'user_sender': user_sender_id,
+                                 'user_receiver': user_receiver_id,
+                                 'confirmed': True}])
         return result
 
 

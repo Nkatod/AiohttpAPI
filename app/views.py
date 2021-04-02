@@ -4,6 +4,18 @@ import json
 
 
 async def handle(request):
+    """
+        ---
+        description: This end-point allow to test that service is up.
+        tags:
+        - Health check
+        produces:
+        - application/json
+        responses:
+            "200":
+                description: successful operation.
+    """
+
     test_status = {'status': 'OK'}
     return web.Response(text=json.dumps(test_status, indent=4), status=200)
 
@@ -25,6 +37,20 @@ class UsersView:
 
     @staticmethod
     async def get_all_users(request):
+        """
+            ---
+            summary: Get all users list
+            description: Get all users list
+            tags:
+            - User
+            produces:
+            - application/json
+            responses:
+                "200":
+                    description: successful operation.
+                "500":
+                    description: Internal server error
+        """
         try:
             users_list = await models.get_all_users()
             response_obj = {'status': 'success', 'users_list': users_list}
@@ -35,6 +61,35 @@ class UsersView:
 
     @staticmethod
     async def authorization(request):
+        """
+            ---
+            summary: Authorize user
+            description: This end-point allow to authorize user
+            tags:
+            - User
+            produces:
+            - application/json
+            parameters:
+            - in: query
+              name: login
+              description: login
+              required: true
+              default: user1
+              type: string
+            - in: query
+              name: password
+              description: login
+              required: true
+              default: password
+              type: string
+            responses:
+            "200":
+                description: successful operation
+            "401":
+                description: Unauthorized
+            "500":
+                description: Internal server error
+        """
         try:
             response_result = await models.authenticate_by_login_password(request)
             if response_result.is_ok:

@@ -9,6 +9,47 @@ import json
 TEST_USERS_Q = 3
 
 
+
+def test_cache():
+    from app.cache import timed_cache
+    import time
+
+    class LogStream:
+        def __init__(self):
+            self.logs = []
+
+        def add(self, log_str):
+            self.logs.append(log_str)
+
+        def get_last_log(self):
+            if len(self.logs):
+                return self.logs.pop(0)
+            return ''
+
+    log_stream = LogStream()
+    @timed_cache(seconds=1)
+    def cache_testing_function(num1, num2):
+        nonlocal log_stream
+        log_stream.add("Not cached yet.")
+        return num1 + num2
+
+    result1 = cache_testing_function(2, 3)
+    last_log = log_stream.get_last_log()
+    assert last_log == "Not cached yet."
+    assert result1 == 5
+
+    result2 = cache_testing_function(2, 3)
+    last_log = log_stream.get_last_log()
+    assert len(last_log) == 0
+    assert result2 == 5
+
+    time.sleep(1)
+    result3 = cache_testing_function(2, 3)
+    last_log = log_stream.get_last_log()
+    assert last_log == "Not cached yet."
+    assert result3 == 5
+
+
 def test_security():
     user_password = 'Qwerty'
     hashed = generate_password_hash(user_password)

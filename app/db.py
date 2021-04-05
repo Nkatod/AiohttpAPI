@@ -6,7 +6,7 @@ from sqlalchemy import (
 )
 from pandas import DataFrame
 from app.security import generate_password_hash
-import numpy as np
+from app.cache import timed_cache
 
 DSN = "mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
 
@@ -29,6 +29,10 @@ class DBEngine(object):
         self.__db_engine = engine
 
 
+
+
+
+
 _users_table = Table(
     'users', meta,
 
@@ -44,8 +48,8 @@ class UsersTable:
     def users_table(self):
         return _users_table
 
-    @staticmethod
-    async def check_user_if_exists(login: str) -> DataFrame:
+    @timed_cache(seconds=60)
+    async def check_user_if_exists(self, login: str) -> DataFrame:
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
             sql_text = text('select user_id from users where login=:login;')
@@ -69,8 +73,8 @@ class UsersTable:
             await conn.execute('commit')
         return result
 
-    @staticmethod
-    async def get_password_hash(login: str) -> DataFrame:
+    @timed_cache(seconds=60)
+    async def get_password_hash(self, login: str) -> DataFrame:
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
             sql_text = text('select password from users where login=:login;')
@@ -83,6 +87,7 @@ class UsersTable:
             result = DataFrame(item_list)
         return result
 
+    @timed_cache(seconds=60)
     async def get_login_by_id(self, user_id: int) -> DataFrame:
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:
@@ -97,6 +102,7 @@ class UsersTable:
     def __init__(self):
         self.users_list = []
 
+    @timed_cache(seconds=60)
     async def get_all_users(self):
         engine = DBEngine().db_engine
         async with engine.acquire() as conn:

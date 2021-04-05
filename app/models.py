@@ -19,7 +19,7 @@ class User:
         self.items = []
 
     async def check_user_by_login(self) -> bool:
-        result = await db.UsersTable.check_user_if_exists(self.login)
+        result = await db.UsersTable().check_user_if_exists(self.login)
         if len(result) != 1:
             return False
         self.user_id = int(result['user_id'][0])

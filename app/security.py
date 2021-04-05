@@ -71,7 +71,7 @@ class LoginAuthennticator(Authenticator):
         user_response = await self.check_user_by_login(credentials.login)
         if not user_response.is_ok:
             return user_response
-        df = await db.UsersTable.get_password_hash(credentials.login)
+        df = await db.UsersTable().get_password_hash(credentials.login)
         if len(df) != 1:
             return ResponseResult(401, {'status': 'failed', 'reason': 'Password not found in DB'})
         db_password = df['password'][0]
@@ -83,7 +83,7 @@ class LoginAuthennticator(Authenticator):
         return response_result
 
     async def check_user_by_login(self, login) -> ResponseResult:
-        result = await db.UsersTable.check_user_if_exists(login)
+        result = await db.UsersTable().check_user_if_exists(login)
         if len(result) != 1:
             return ResponseResult(401, {'status': 'failed', 'reason': 'No user found'})
         user_id = int(result['user_id'][0])

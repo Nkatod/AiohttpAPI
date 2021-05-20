@@ -1,5 +1,5 @@
-import base64
-import bcrypt
+from base64 import b64decode, b64encode
+from bcrypt import hashpw, gensalt
 from random import choice
 import string
 from app.base_models import ResponseResult
@@ -118,16 +118,16 @@ def create_new_user_token(user_id: int, login: str) -> Token:
 
 def generate_password_hash(password: str) -> str:
     password_bin = password.encode('utf-8')
-    hashed = bcrypt.hashpw(password_bin, bcrypt.gensalt())
-    encoded = base64.b64encode(hashed)
+    hashed = hashpw(password_bin, gensalt())
+    encoded = b64encode(hashed)
     return encoded.decode('utf-8')
 
 
 def check_password_hash(encoded: str, password: str) -> bool:
     password = password.encode('utf-8')
     encoded = encoded.encode('utf-8')
-    hashed = base64.b64decode(encoded)
-    is_correct = bcrypt.hashpw(password, hashed) == hashed
+    hashed = b64decode(encoded)
+    is_correct = hashpw(password, hashed) == hashed
     return is_correct
 
 

@@ -1,6 +1,11 @@
 # pytest tests/test_integration.py --pdb
 
+import asyncio
 import pytest
+
+
+
+import sys
 from app.main import init_app
 from app.utils import DEFAULT_CONFIG_PATH, load_config
 from init_db import (
@@ -10,11 +15,16 @@ from init_db import (
     user_engine
 )
 
-@pytest.fixture
-async def client(aiohttp_client):
+asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+loop = asyncio.get_event_loop_policy().new_event_loop()
 
+
+
+@pytest.fixture
+async def client(loop, aiohttp_client):
     app, host, port = await init_app()
     return await aiohttp_client(app)
+
 
 
 def full_database_reset():

@@ -3,7 +3,6 @@ from abc import ABC
 from app.base_models import ResponseResult, ReferenceToTransfer
 from app.security import get_user_by_token, security_authenticate_by_login_password
 
-
 class Creator(ABC):
     pass
 
@@ -249,7 +248,6 @@ class ItemCreator(Creator):
                                   reference=reference)
         response = await item_to_send.move_to_user(ref)
         return response
-
 
 async def authenticate_by_login_password(request) -> ResponseResult:
     login = request.query['login']

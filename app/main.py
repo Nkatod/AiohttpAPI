@@ -2,17 +2,24 @@ from aiohttp import web
 import asyncio
 import logging
 from app.utils import load_config, DEFAULT_CONFIG_PATH
-from app.db import init_db
+from app.db import init_pg, close_pg
 from app.routes import setup_routes
 from aiohttp_swagger import *
 
 
+
+
 async def init_app():
+
     conf = load_config(DEFAULT_CONFIG_PATH)
 
     app = web.Application()
     app['config'] = conf
-    await init_db(app)
+
+    # create db connection on startup, shutdown on exit
+    app.on_startup.append(init_pg)
+    app.on_cleanup.append(close_pg)
+
     setup_routes(app)
     setup_swagger(app)
     host, port = conf['host'], conf['port']
@@ -22,7 +29,9 @@ async def init_app():
 def main():
     logging.basicConfig(level=logging.WARNING)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.SelectorEventLoop()
+    asyncio.set_event_loop(loop)
+
     app, host, port = loop.run_until_complete(init_app())
     web.run_app(app, host=host, port=port)
 

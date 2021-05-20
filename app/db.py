@@ -1,4 +1,4 @@
-from aiomysql.sa import create_engine
+import aiopg.sa
 from sqlalchemy.sql.expression import text
 from sqlalchemy import (
     MetaData, Table, Column, ForeignKey,
@@ -8,7 +8,6 @@ from pandas import DataFrame
 from app.security import generate_password_hash
 from app.cache import timed_cache
 
-DSN = "mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
 
 meta = MetaData()
 
@@ -29,11 +28,7 @@ class DBEngine(object):
         self.__db_engine = engine
 
 
-
-
-
-
-_users_table = Table(
+users_table = Table(
     'users', meta,
 
     Column('user_id', Integer, primary_key=True),
@@ -42,11 +37,10 @@ _users_table = Table(
 )
 
 
-
 class UsersTable:
     @property
     def users_table(self):
-        return _users_table
+        return users_table
 
     @timed_cache(seconds=60)
     async def check_user_if_exists(self, login: str) -> DataFrame:
@@ -112,7 +106,7 @@ class UsersTable:
                 self.users_list.append({'user_id': val[0], 'login': val[1]})
 
 
-_items_table = Table(
+items_table = Table(
     'items', meta,
 
     Column('item_id', Integer, primary_key=True),
@@ -127,7 +121,7 @@ _items_table = Table(
 class ItemsTable:
     @property
     def items_table(self):
-        return _items_table
+        return items_table
 
     async def create_new_item(self, user_id, attr1: str):
         engine = DBEngine().db_engine
@@ -260,8 +254,8 @@ class ItemsTransportTable:
         return result
 
 
-tables_list = [_users_table,
-               _items_table,
+tables_list = [users_table,
+               items_table,
                items_transport]
 
 
@@ -269,15 +263,22 @@ class RecordNotFound(Exception):
     """Requested record in database was not found"""
 
 
-async def init_db(app):
-    conf = app['config']['mysql']
-    engine = await create_engine(user=conf['user'], db=conf['database'],
-                                 host=conf['host'], password=conf['password'])
+async def init_pg(app):
+    conf = app['config']['postgres']
+    engine = await aiopg.sa.create_engine(
+        database=conf['database'],
+        user=conf['user'],
+        password=conf['password'],
+        host=conf['host'],
+        port=conf['port'],
+        minsize=conf['minsize'],
+        maxsize=conf['maxsize'],
+    )
     app['db_engine'] = engine
     db_engine = DBEngine()
     db_engine.db_engine = engine
 
 
-async def close_db(app):
+async def close_pg(app):
     app['db'].close()
     await app['db'].wait_closed()

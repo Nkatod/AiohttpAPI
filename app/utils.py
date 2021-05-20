@@ -9,13 +9,15 @@ CONFIG_TRAFARET = t.Dict(
     {
         'host': t.IP,
         'port': t.Int(),
-        t.Key('mysql'): t.Dict(
+        t.Key('postgres'): t.Dict(
             {
                 'database': t.String(),
                 'user': t.String(),
                 'password': t.String(),
                 'host': t.String(),
-                'port': t.Int()
+                'port': t.Int(),
+                'minsize': t.Int(),
+                'maxsize': t.Int(),
             }
         ),
     }
